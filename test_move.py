@@ -1,21 +1,25 @@
-from os.path import dirname, join, abspath
+from os.path import dirname, join, abspath, exists
 import torch
 import numpy as np
 
 from RL import Memory,PPO
 from EnvromentSim import ControlArm
 
+from torch.utils.tensorboard import SummaryWriter
+import numpy as np
+# from os import path
+
 ABS_PATH = dirname(abspath(__file__))
 WEIGHT_PATH = join(ABS_PATH, 'Weight/')
 
 
-def train():
+def train(ep,writer):
     env = ControlArm()
     ############## Hyperparameters ##############
     solved_reward = 300         # stop training if avg_reward > solved_reward
     log_interval = 10           # print avg reward in the interval
     max_episodes = 10000        # max training episodes
-    max_timesteps = 500        # max timesteps in one episode
+    max_timesteps = 600        # max timesteps in one episode
     
     update_timestep = 100      # update policy every n timesteps
     action_std = 0.5            # constant std for action distribution (Multivariate Normal)
@@ -23,13 +27,12 @@ def train():
     eps_clip = 0.2              # clip parameter for PPO
     gamma = 0.99                 # discount factor
     
-    lr = 0.0003                 # parameters for Adam optimizer
-    betas = (0.9, 0.999)
+    lr = 0.001                 # parameters for Adam optimizer
     
-    random_seed = None
+    random_seed = 42
     
     # creating environment
-    state_dim = 31
+    state_dim = 10+2*7*6
     print(state_dim)
     action_dim = 7
     print(action_dim)
@@ -41,19 +44,20 @@ def train():
         np.random.seed(random_seed)
     
     memory = Memory()
-    ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
-    print(lr,betas)
+    ppo = PPO(state_dim, action_dim, action_std, lr, gamma, K_epochs, eps_clip)
+    print(lr)
 
     # logging variables
     running_reward = 0
     avg_length = 0
     time_step = 0
 
-    # ppo.policy.load_state_dict(torch.load(WEIGHT_PATH + 'PPO_continuous_log.pth'))
+    if exists(WEIGHT_PATH + 'PPO_continuous_log.pth'):
+        ppo.policy.load_state_dict(torch.load(WEIGHT_PATH + 'PPO_continuous_log.pth'))
 
     # training loop
     for i_episode in range(1, max_episodes+1):
-        
+        episode_reward = 0
         not_find_path = True
         while(not_find_path):
             try:
@@ -76,22 +80,19 @@ def train():
             
             # update if its time
             running_reward += reward
+            episode_reward += reward
             if terminate:
                 break
         
         ppo.update(memory)
         memory.clear_memory()
         time_step = 0
-        print('Episode {}'.format(i_episode))       
-  
-        avg_length += t
-        # stop training if avg_reward > solved_reward
-        if running_reward > (log_interval*solved_reward):
-            print("########## Solved! ##########")
-            torch.save(ppo.policy.state_dict(), WEIGHT_PATH +'PPO_continuous_solved.pth')
-            # env.shutdown()
-            # break
+        print('Episode {} , reward : {}'.format(ep+i_episode,episode_reward))       
         
+        writer.add_scalar('Train/return', episode_reward, ep+i_episode)
+
+        avg_length += t
+
         # logging
         if i_episode % log_interval == 0:
             avg_length = int(avg_length/log_interval)
@@ -103,17 +104,16 @@ def train():
             avg_length = 0
 
         # save every 40 episodes 280
-        if i_episode % 40 == 0:
+        if i_episode % 20 == 0:
             torch.save(ppo.policy.state_dict(), WEIGHT_PATH + 'PPO_continuous.pth')
-            env.shutdown()
-            break
+            # env.shutdown()
+            # break
             
-
-    
     return i_episode
     
 if __name__ == '__main__':
-    ep = 280
-    while(1):
-        ep += train()
-        print('Big Episode {}'.format(ep)) 
+    ep = 0
+    writer = SummaryWriter()
+
+    # while(1):
+    ep += train(ep,writer)

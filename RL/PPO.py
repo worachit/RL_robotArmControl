@@ -3,15 +3,14 @@ import torch.nn as nn
 from .ActorCritic import *
 
 class PPO:
-    def __init__(self, state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip):
+    def __init__(self, state_dim, action_dim, action_std, lr, gamma, K_epochs, eps_clip):
         self.lr = lr
-        self.betas = betas
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
         
         self.policy = ActorCritic(state_dim, action_dim, action_std).to(device)
-        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr, betas=betas)
+        self.optimizer = torch.optim.Adagrad(self.policy.parameters(), lr=lr)
         
         self.policy_old = ActorCritic(state_dim, action_dim, action_std).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
@@ -27,8 +26,6 @@ class PPO:
         rewards = []
         discounted_reward = 0
         for reward, is_terminal in zip(reversed(memory.rewards), reversed(memory.is_terminals)):
-            if is_terminal:
-                reward = 500
             discounted_reward = reward + (self.gamma * discounted_reward)
             rewards.insert(0, discounted_reward)
         
@@ -55,11 +52,23 @@ class PPO:
             surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
             loss = -torch.min(surr1, surr2) + 0.5*self.MseLoss(state_values, rewards) - 0.01*dist_entropy
             
+            # print("clipped : ",end="")
+            # print(-torch.min(surr1, surr2).mean().item())
+            # self.writer.add_scalar('Loss/clipped', -torch.min(surr1, surr2).mean().item(), self.i)
+            # print("MSE : ",end="")
+            # print(self.MseLoss(state_values, rewards).mean().item())
+            # self.writer.add_scalar('Loss/MSE', self.MseLoss(state_values, rewards).mean().item(), self.i)
+            # print("dist : ",end="")
+            # print(dist_entropy.mean().item())
+            # self.writer.add_scalar('Loss/dist', dist_entropy.mean().item(), self.i)
+            # print("+++++++++++++++")
+
             # take gradient step
             self.optimizer.zero_grad()
             loss.mean().backward()
             self.optimizer.step()
-            
+            # self.i += 1
+
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
     
