@@ -18,7 +18,7 @@ SCENE_FILE = join(PARENT_PATH, 'VrepEnviroment/baxter_final_env3.ttt')
 class ControlArm(object):
     def __init__(self):
         self.pr = PyRep()
-        self.pr.launch(SCENE_FILE, headless=True)
+        self.pr.launch(SCENE_FILE, headless=False)
         self.pr.start()
         self.agent = BaxterLeft()
         self.agent.set_control_loop_enabled(True)
